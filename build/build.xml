@@ -1,0 +1,389 @@
+<!--
+    Licensed Materials - Property of IBM
+    (c) Copyright IBM Corporation 2013. All Rights Reserved.
+   
+    Note to U.S. Government Users Restricted Rights:  
+    Use, duplication or disclosure restricted by GSA ADP Schedule 
+    Contract with IBM Corp. 
+ -->
+<!--
+This sample build demonstrates use of ant build that is run using Jenkins (http://jenkins-ci.org/) using RTC SCM and an RTC build
+definition to execute builds from the developer's IDE. Build status and results are published to an RTC build result that is viewable in RTC.
+
+Pre-requisites:
+1. Java JDK is installed and JAVA_HOME is set the JDK install path
+2. Apache Ant is installed. The system path includes the bin directory in the ant install path (i.e. C:/apache-ant-1.7.1/bin)
+3. Jenkins is installed and the server is running (java -jar jenkins.war)
+4. An RTC 4.x build definition for the target build. It should be defined as follows:
+	a) In the wizard General Information page select: Hudson/Jenkins Build
+	b) In the wizard Additional Configuration page check: General and Properties
+	c) Press Finish to complete the build definition.
+5. An RTC build engine of type Hudson/Jenkins corresponding to the Hudson/Jenkins server, and supporting the definition from the previous step.
+6. A Jenkins job is defined with the name that matches the name of the RTC build definition above.  (RTC Junit was used for the sample build) and is defined with the following configuration information.
+	a) Job type is: Build a free-style software project
+	b) Source code management: None
+	c) Build is set to: Invoke Ant
+	d) Targets field contains:
+		all
+		-lib <path to RTC build toolkit (i.e. c:/jazz/buildsystem/buildtoolkit) >
+		-DrepositoryAddress=https://<repository URL>:9443/jazz
+		-DbuildDefinitionId=<name of the build engine defined above>
+		-DbuildEngineId=<name of build engine defined above)
+		-DjazzBuildSystemPath=<RTC installation path (i.e. c:/jazz)>
+	e) Build File: buildOnHudson.xml
+-->
+
+<project name="RTC Jenkins" default="all">
+	<!-- Initialize Ant-Contrib tasks. -->
+	<taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
+<!--
+
+Properties passed from the Jenkins build definition to this build script:
+	repositoryAddress: URL to the Jazz server
+	buildDefinitionId: Name of the RTC build definition of the application build
+	buildEngineId: Name of the RTC build engine that is associated with the RTC build definition (buildDefinitionId)
+	jazzBuildSystemPath: path to the installation of the RTC where the Build System client exists
+	workingDir: path to the Hudson/Jenkins working directory
+-->
+
+	<!-- This import provides visibility to all the build toolkit tasks -->
+	<import file="${jazzBuildSystemPath}/buildsystem/buildtoolkit/BuildToolkitTaskDefs.xml"/>
+
+	<!--	Property userid is a build user defined in RTC with a Build System client license -->
+	<property name="userId" value="scowan" />
+	<property environment="env"/> <!--environmental properties provided by Jenkins -->
+	<property name="jenkinsBuildLabel" value="${env.JOB_NAME} [${env.BUILD_NUMBER}]"/>
+    <property name="workingDir" value="JazzWorkspace"/> <!-- Must match the value in the RTC build definition load directory. -->
+    <property name="jbeOutputDir" value="jbe"/> <!-- Directory on Jenkins worker where the JBE results are written such as log files. -->
+    <property name="passwordFile" value="${env.JENKINS_HOME}/${userId}-password" />  <!-- Path to the password file, created with: jbe -createPasswordFile -->
+    <property name="jbePath" value="${jazzBuildSystemPath}/buildsystem/buildengine/eclipse"/> <!-- Path to Jazz Build Engine on master/slave path. -->
+    <property name="status" value="OK" /> <!-- used in task completeTeamBuild  -->
+    <property name="tab" value="&#x0009;"/> <!-- This property is used in files that are called and not directly in this file. -->
+	<property name="JENKINS_URL" value="http://localhost:8081" />
+	<condition property="BUILD_URL" value="${env.BUILD_URL}" else="${JENKINS_URL}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}/">
+		<isset property="env.BUILD_URL" />
+	</condition>
+
+	<!-- Decide whether we should start the build or if a build has already been started. -->
+    <condition property="shouldStartBuild">
+        <equals arg1="${buildResultUUID}" arg2=""/>
+	</condition>
+
+
+	<target name="all" depends="preBuild, runTargetBuild, postBuild"/>
+	
+	<target name="preBuild" depends="checkEnv">
+		<echo message="Jenkins build label: ${jenkinsBuildLabel}" />
+		<echo message="Working dir: ${workingDir}" />
+		<echo message="Jenkins home: ${env.JENKINS_HOME}" />
+		<echo message="Build URL: ${BUILD_URL}" />
+		<echo message="Jazz build system install path: ${jazzBuildSystemPath}" />
+		<echo message="shouldStartBuild: ${shouldStartBuild}" />
+
+		<!--  Application builds can flag build errors by creating file appBuildErrors (using Ant "touch" task). This
+		is used to set property appBuildErrors -->
+		<delete file="appBuildErrors" />  <!-- Remove indication of prior application build failure -->
+		<delete file="ext_links" />  <!-- Remove indication of prior external links -->
+        <delete dir="${workingDir}/test.results"/>  <!-- Delete the test.results dir to avoid getting stale tests posted. -->
+        <delete>                                    <!-- Delete all build-XX.log files that may exist within the root. -->
+            <fileset dir="." includes="build*.log"/>
+        </delete>
+		<delete file="buildResultID.properties" />  <!-- Remove build result ID (needed by post-build script) -->
+
+		<!-- Notify jazz that a build is starting. To use this task
+			 you must have already defined a build definition and
+			 a build engine registration in the jazz repository. -->
+		<if>
+			<equals arg1="${shouldStartBuild}" arg2="true"/>
+			<then>
+                <echo message="**** Starting new team build. ******"/>
+				<startTeamBuild buildDefinitionId="${buildDefinitionId}"
+                    engineId="${buildEngineId}"
+                    label="${jenkinsBuildLabel} (from Jenkins)"
+                    autoComplete="false"
+                    resultUUIDProperty="buildResultUUIDNew"
+                    repositoryAddress="${repositoryAddress}"
+                    userId="${userId}"
+                    passwordFile="${passwordFile}" />
+				
+				<echo message="buildResultID=${buildResultUUIDNew}" file="buildResultID.properties" />
+			</then>
+		</if>
+
+
+		<if>
+			<equals arg1="${shouldStartBuild}" arg2="true"/>
+			<then>
+				<property name="buildResultID" value="${buildResultUUIDNew}"/>
+			</then>
+			<else>
+				<property name="buildResultID" value="${buildResultUUID}"/>
+			</else>
+		</if>
+
+		<echo message="Build result UUID: ${buildResultID}" />
+		<echo message="Application build script: ${targetBuildPath}" />
+		<dirname file="${workingDir}/${targetBuildPath}" property="targetBuildDir" />
+		<basename file="${workingDir}/${targetBuildPath}" property="targetBuildFile" />
+		<echo message="Application build directory: ${targetBuildDir}" />
+		<echo message="Application build file: ${targetBuildFile}" />
+		
+		<antcall target="loadOrDelete" />
+
+		<!-- Update the build progress in Jazz by starting a new build activity. -->
+		<!--
+		<startBuildActivity activityIdProperty="mavenBuildId"
+		                    label="running maven build..."
+		                    buildResultUUID="${buildResultID}"
+		                    repositoryAddress="${repositoryAddress}"
+		                    userId="${userId}"
+		                    passwordFile="${passwordFile}" />
+		-->
+		
+		<!-- TODO Build progress goes quickly to 99% -->
+		<!-- TODO RTC build is not updated with any Maven build activities -->
+
+	</target>
+
+	<target name="postBuild" depends="checkEnv, getBuildResultID, publishBuildResults" if="continueBuild">
+		
+		<!-- Complete the maven build activity. -->
+		<!-- TODO completing build activity fails with: com.ibm.team.build.common.TeamBuildException: The build activity with id "mavenBuildId" does not exist in the build result.
+		<completeBuildActivity activityId="mavenBuildId"
+		                       buildResultUUID="${buildResultID}"
+		                       repositoryAddress="${repositoryAddress}"
+		                       userId="${userId}"
+		                       passwordFile="${passwordFile}" />
+		-->
+		
+		<!-- Publish log in the build result directory produced by Jenkins -->
+		<!-- TODO Published build log includes binary data -->
+		<logPublisher filePath="${env.JENKINS_HOME}/jobs/${env.JOB_NAME}/builds/${env.BUILD_ID}/log"
+            label="Build log"
+            buildResultUUID="${buildResultID}"
+            repositoryAddress="${repositoryAddress}"
+            userId="${userId}"
+            passwordFile="${passwordFile}"/>
+
+		<!-- Set build status if there are application build errors -->
+		<available file="appBuildErrors" property="appBuildErrors" />
+
+		<!-- Set the build status from OK to ERROR if an application build error occurred. -->
+		<condition property="status" value="ERROR">
+			<and>
+				<isset property="appBuildErrors" />
+			</and>
+		</condition>
+
+		<!-- Notify jazz that the build is complete. -->
+		<if>
+			<equals arg1="${shouldStartBuild}" arg2="true"/>
+			<then>
+				<completeTeamBuild status="${status}"
+				   buildResultUUID="${buildResultID}"
+	               repositoryAddress="${repositoryAddress}"
+	               userId="${userId}"
+	               passwordFile="${passwordFile}"
+	               verbose="true" />
+			</then>
+		</if>
+
+		<fail if="appBuildErrors"
+			message="!!!!! ${jenkinsBuildLabel} build failed !!!!!" />
+
+		<echo message="Build ${jenkinsBuildLabel} completed." />
+
+	</target>
+	
+	<!-- The real work gets done here. The task callRequestedBuild transfers control to the application build script
+	identified in property targetBuildPath.
+	-->
+
+	<!-- Run the target build. If an error occurs a zero length file named appBuildErrors is set by the requested build.  -->
+    <target name="runTargetBuild">
+        <ant dir="${targetBuildDir}" antfile="${targetBuildFile}" >
+	      <property name="buildResultUUID" value="${buildResultID}" />
+	    </ant>
+    </target>
+
+	<target name="loadOrDelete" depends="loadWorkspace, deleteBuildResults" if="continueBuild">
+    </target>
+	
+    <target name="loadWorkspace">
+        <!-- The output file needs to exist or the JBE process will fail. -->
+        <delete file="jbe_output.txt"/>
+        <touch file="jbe_output.txt"/>
+
+        <!-- Use the JBE capabilities to load the target workspace.
+             Using JBE will ensure that the changes are properly accepted based on a personal or regular build. -->
+        <exec executable="${jbePath}/jbe.exe" output="jbe_output.txt">
+            <arg value="-repository"/>
+            <arg value="${repositoryAddress}"/>
+            <arg value="-userId"/>
+            <arg value="${userId}"/>
+            <arg value="-passwordFile"/>
+            <arg value="${passwordFile}"/>
+            <arg value="-buildResultUUID"/>
+            <arg value="${buildResultID}"/>
+            <arg value="-engineId"/>
+            <arg value="${buildEngineId}"/>
+            <arg value="-participants"/>
+            <arg value="com.ibm.team.build.jazzscm"/>  <!-- Run only the SCM phase -->
+            <arg value="-noComplete"/>  <!-- Don't complete the build until the main build script has run -->
+            <arg value="-verbose"/>
+            <arg value="-data"/>
+            <arg value="/tmp/jbe-workspace-${buildEngineId}"/>  <!-- location for JBE's Eclipse workspace (not the loaded SCM workspace) -->
+        </exec>
+
+
+        <!-- Load the output file from running JBE and store in a property. -->
+        <loadfile property="jbeResultString" srcfile="jbe_output.txt"/>
+
+        <!-- Write JBE output to standard out. -->
+        <echo message="${jbeResultString}"/>
+
+        <!--
+            Check for result code in JBE output.
+            RC=0 means there were changes to build and it ran OK (build may still have warnings/errors).
+            RC=1 means it failed (there may or may not be changes).
+            RC=2 means there were no changes to build (applies only to scheduled builds).
+        -->
+
+		<!-- set noChangesFound property -->
+		<condition property="noChangesFound" value="true" else="false">
+            <matches string="${jbeResultString}" pattern="RC=2"/>
+	    </condition>
+
+        <!-- set changesFoundButBuildFailed property -->
+		<condition property="jbeRunFailed" value="true" else="false">
+            <matches string="${jbeResultString}" pattern="RC=1"/>
+	    </condition>
+
+        <!-- Set property to determine if the build should continue. -->
+        <condition property="continueBuild">
+            <and>
+                <isFalse value="${noChangesFound}"/>
+                <isFalse value="${jbeRunFailed}"/>
+            </and>
+        </condition>
+
+        <!-- We need to delete the build results that were created even though a build was not needed. -->
+        <condition property="shouldDeleteBuilds">
+            <and>
+                <isTrue value="${noChangesFound}"/>
+                <isFalse value="${shouldStartBuild}"/> <!-- User initiated from Jenkins. -->
+            </and>
+        </condition>
+
+		<echo message="noChangesFound: ${noChangesFound}"/>
+		<echo message="jbeRunFailed: ${jbeRunFailed}"/>
+		<echo message="continueBuild: ${continueBuild}"/>
+		<echo message="shouldDeleteBuilds: ${shouldDeleteBuilds}"/>
+
+	</target>
+
+
+    <target name="deleteBuildResults" if="shouldDeleteBuilds">
+<!--        <echo message="Deleting RTC build result ${buildResultID}"/>  -->
+        <!-- Delete the RTC build result that is no longer required. -->
+        <deleteBuildResult
+            repositoryAddress="${repositoryAddress}"
+		    userId="${userId}"
+		    passwordFile="${passwordFile}"
+            buildResultUUID="${buildResultID}"/>
+
+        <!-- Delete the Jenkins build result. You need to delete both the build number directory as well as the build ID (the history information). -->
+        <echo message="RTC build not needed and has been deleted.  Deleting Jenkins build at ${BUILD_URL}"/>
+        <!--
+            Use the same HTTP request that the GUI uses to delete a build.
+            Simply deleting the build directory and symlinks did not work This is a much safer
+            approach.
+            The BUILD_URL environment variable is set by Jenkins and is the URL to the build result.
+            Sending doDelete to the BUILD_URL will delete the build.
+        -->
+        <post to="${BUILD_URL}doDelete">
+            <prop name="Submit" value="Yes"/>
+        </post>
+    </target>
+
+	<target name="getBuildResultID">
+		
+		 <property file="buildResultID.properties"/>	
+
+        <!-- Set property to determine if the build should continue. -->
+        <condition property="continueBuild">
+        	<not>
+	        	<equals arg1="${buildResultID}" arg2="" />
+        	</not>
+        </condition>
+
+	</target>
+	
+	<target name="publishBuildResults">
+
+		
+		<!-- Path to target. -->
+		<property name="targetDir" value="${workingDir}/com.ibm.team.build.hjplugin/target" />
+
+		<!-- Publish some downloadable artifacts. Files published with the 
+		     artifactFilePublisher are shown on the Downloads tab of the build
+		     result editor. -->
+		
+		<artifactFilePublisher buildResultUUID="${buildResultID}"
+		                       repositoryAddress="${repositoryAddress}"
+		                       userId="${userId}"
+		                       passwordFile="${passwordFile}"
+		                       verbose="true"
+		                       filePath="${targetDir}/teamconcert.hpi"
+		                       label="com.ibm.team.build.hjplugin.hpi" />
+		
+		<!-- Path to the surefire-reports. -->
+		<property name="surefire-reportsDir" value="${targetDir}/surefire-reports" />
+
+		<logPublisher buildResultUUID="${buildResultID}"
+		              repositoryAddress="${repositoryAddress}"
+		              userId="${userId}"
+		              passwordFile="${passwordFile}"
+                      filePath="${surefire-reportsDir}/TEST-com.ibm.team.build.internal.hjplugin.tests.RTCScmIT.xml"
+                      label="TEST-com.ibm.team.build.internal.hjplugin.tests.RTCScmIT.xml" />
+
+		<logPublisher buildResultUUID="${buildResultID}"
+		              repositoryAddress="${repositoryAddress}"
+		              userId="${userId}"
+		              passwordFile="${passwordFile}"
+                      filePath="${surefire-reportsDir}/TEST-com.ibm.team.build.internal.hjplugin.tests.RTCChangeLogParserTest.xml"
+                      label="TEST-com.ibm.team.build.internal.hjplugin.tests.RTCChangeLogParserTest.xml" />
+
+		<logPublisher buildResultUUID="${buildResultID}"
+		              repositoryAddress="${repositoryAddress}"
+		              userId="${userId}"
+		              passwordFile="${passwordFile}"
+                      filePath="${surefire-reportsDir}/TEST-InjectedTest.xml"
+                      label="TEST-InjectedTest.xml" />
+		
+		<!-- Publish link in Jenkins build result to RTC build result. 
+		     The Anchor Chain plugin for Hudson/Jenkins can be used to consume this file and publish the links. -->
+		<echo file="ext_links" append="true" message="RTC Build Result${tab}${repositoryAddress}/resource/itemOid/com.ibm.team.build.BuildResult/${buildResultID}"/>
+
+		<!-- Publish link to Jenkins build result from RTC build result. 
+		     Links published in this way are shown in the Links section of the build result editor.-->
+		<linkPublisher buildResultUUID="${buildResultID}"
+		    verbose="true"
+		    label="Jenkins Build Result: ${jenkinsBuildLabel}"
+		    url="${BUILD_URL}"
+		    repositoryAddress="${repositoryAddress}"
+		    userId="${userId}"
+		    passwordFile="${passwordFile}" />
+	</target>
+
+	<target name="checkEnv">
+		<fail message="The repositoryAddress property must be defined."
+		      unless="repositoryAddress" />
+		<echo message="Using repositoryAddress = ${repositoryAddress}" />
+
+		<fail message="The userId property must be defined."
+		      unless="userId" />
+		<echo message="Using userId = ${userId}" />
+
+	</target>
+</project>

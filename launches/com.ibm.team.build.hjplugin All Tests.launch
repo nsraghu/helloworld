@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?><launchConfiguration type="org.eclipse.m2e.Maven2LaunchConfigurationType">
+<booleanAttribute key="M2_DEBUG_OUTPUT" value="false"/>
+<stringAttribute key="M2_GOALS" value="verify"/>
+<booleanAttribute key="M2_NON_RECURSIVE" value="false"/>
+<booleanAttribute key="M2_OFFLINE" value="false"/>
+<stringAttribute key="M2_PROFILES" value=""/>
+<listAttribute key="M2_PROPERTIES">
+<listEntry value="forkMode=never"/>
+<listEntry value="com.ibm.team.build.configured=true"/>
+<listEntry value="com.ibm.team.build.toolkit=C:\buildToolkits\RTC-BuildSystem-Toolkit-Win_4.0.6.0-ga\jazz\buildsystem\buildtoolkit"/>
+<listEntry value="com.ibm.team.build.serverURI=https://localhost:9443/jazz/"/>
+<listEntry value="com.ibm.team.build.userId=ADMIN"/>
+<listEntry value="com.ibm.team.build.password=ADMIN"/>
+<listEntry value="com.ibm.team.build.timeout=480"/>
+<listEntry value="com.ibm.team.build.passwordFile=${workspace_loc:/com.ibm.team.build.hjplugin/src/test/resources/com/ibm/team/build/internal/hjplugin/tests/ADMIN-password.txt}"/>
+<listEntry value="com.ibm.team.build.userIdForAuthenticationFailures=HJPluginTestsFail"/>
+</listAttribute>
+<stringAttribute key="M2_RUNTIME" value="EMBEDDED"/>
+<booleanAttribute key="M2_SKIP_TESTS" value="false"/>
+<intAttribute key="M2_THREADS" value="1"/>
+<booleanAttribute key="M2_UPDATE_SNAPSHOTS" value="false"/>
+<booleanAttribute key="M2_WORKSPACE_RESOLUTION" value="false"/>
+<stringAttribute key="org.eclipse.debug.core.source_locator_id" value="org.eclipse.m2e.launching.MavenSourceLocator"/>
+<stringAttribute key="org.eclipse.debug.core.source_locator_memento" value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&lt;sourceLookupDirector&gt;&#13;&#10;&lt;sourceContainers duplicates=&quot;false&quot;&gt;&#13;&#10;&lt;container memento=&quot;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;&amp;lt;javaProject name=&amp;quot;com.ibm.team.build.hjplugin&amp;quot;/&amp;gt;&quot; typeId=&quot;org.eclipse.jdt.launching.sourceContainer.javaProject&quot;/&gt;&#13;&#10;&lt;container memento=&quot;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;&amp;lt;javaProject name=&amp;quot;com.ibm.team.build.hjplugin-rtc&amp;quot;/&amp;gt;&quot; typeId=&quot;org.eclipse.jdt.launching.sourceContainer.javaProject&quot;/&gt;&#13;&#10;&lt;container memento=&quot;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot;?&amp;gt;&amp;lt;default/&amp;gt;&quot; typeId=&quot;org.eclipse.debug.core.containerType.default&quot;/&gt;&#13;&#10;&lt;/sourceContainers&gt;&#13;&#10;&lt;/sourceLookupDirector&gt;"/>
+<stringAttribute key="org.eclipse.jdt.launching.WORKING_DIRECTORY" value="${workspace_loc:/com.ibm.team.build.hjplugin}"/>
+</launchConfiguration>
